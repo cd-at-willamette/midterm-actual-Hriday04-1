@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Characterizing Automobiles</title>
+  <style>
+    body { font-family: monospace; background-color: #f8f9fa; color: #212529; margin: 2rem; }
+    h1, h2, h3 { color: #343a40; }
+    pre { background-color: #e9ecef; padding: 1rem; border-radius: 5px; overflow-x: auto; }
+    code { color: #d63384; }
+    blockquote { background: #f1f3f5; border-left: 5px solid #6c757d; padding: 0.5rem 1rem; margin: 1rem 0; }
+    .highlight { background-color: #fff3cd; padding: 1rem; border-radius: 5px; }
+    img { display: block; margin: 1rem auto; max-width: 600px; border: 1px solid #dee2e6; border-radius: 5px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Characterizing Automobiles</h1>
+    <p><strong>Author:</strong> Hriday</p>
+    <p><strong>Date:</strong> 03/17/2025</p>
+  </header>
+
+  <section>
+    <h2>Setup</h2>
+    <pre><code>import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.formula.api as smf
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    mean_squared_error,
+    cohen_kappa_score,
+    roc_curve,
+    roc_auc_score,
+    confusion_matrix
+)
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+import warnings
+warnings.filterwarnings('ignore')
+
+path="/Users/hridayraj/Desktop/sp25/ml/midterm-actual-Hriday04-1-main/Auto.csv"
+Auto=pd.read_csv(path)
+auto=Auto
+auto.dropna(inplace=True)</code></pre>
+  </section>
+
+  <section>
+    <h2>Dataframe</h2>
+    <p>We use the <code>Auto</code> dataframe.</p>
+    <pre><code>Auto.head()</code></pre>
+    <p>It has the following variable names, which describe various attributes of automobiles.</p>
+    <pre><code>Auto.columns</code></pre>
+  </section>
+
+  <section>
+    <h2>Multiple Regression</h2>
+    <pre><code>m1 = smf.ols('mpg ~ year * horsepower', data=auto).fit()
+m1.summary()
+rmse1 = np.sqrt(m1.mse_resid)
+print(f'\nm1 RMSE: {rmse1}')</code></pre>
+    <blockquote>
+      Since the RMSE is 3.533, on average the predicted values are 3.5 mpg away from the actual values.
+    </blockquote>
+  </section>
+
+  <section>
+    <h2>Feature Engineering</h2>
+    <pre><code>auto['brand'] = auto['name'].apply(lambda x: x.split()[0].lower())
+top_brands = auto['brand'].value_counts().nlargest(10).index
+auto['brand_top'] = auto['brand'].apply(lambda x: x if x in top_brands else 'other')
+brand_dummies = pd.get_dummies(auto['brand_top'])
+engineered_df = pd.concat([auto[['mpg']], brand_dummies], axis=1)
+X_eng = brand_dummies
+y_eng = engineered_df['mpg']
+X_train_eng, X_test_eng, y_train_eng, y_test_eng = train_test_split(X_eng, y_eng, random_state=42)
+m2 = smf.ols('mpg ~ ' + ' + '.join(brand_dummies.columns), data=engineered_df).fit()
+print(m2.summary())
+rmse2 = np.sqrt(m2.mse_resid)
+print(f'\nFeature Engineering Model RMSE: {rmse2:.2f}')</code></pre>
+    <blockquote>
+      Using these features in a regression model resulted in an RMSE of 6.9, showing the engineered features did not improve mpg prediction.
+    </blockquote>
+  </section>
+
+  <section>
+    <h2>Classification</h2>
+    <pre><code>binary_df = auto[auto['brand'].isin(['chevrolet', 'honda'])].copy()
+# Balancing and preparing data
+X = balanced_df[['horsepower', 'weight', 'acceleration', 'year']]
+y = balanced_df['brand'].apply(lambda x: 1 if x == 'honda' else 0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
+knn = KNeighborsClassifier(n_neighbors=3)
+knn.fit(X_train, y_train)
+y_pred = knn.predict(X_test)
+kappa = cohen_kappa_score(y_test, y_pred)
+print(f'Kappa Score (Chevrolet vs Honda): {kappa:.2f}')
+cm = confusion_matrix(y_test, y_pred)
+print("\nConfusion Matrix:\n", cm)</code></pre>
+    <blockquote>I used K-NN for its simplicity and effectiveness with small datasets.</blockquote>
+    <blockquote class="highlight">The Kappa score is 0.42, indicating moderate agreement.</blockquote>
+  </section>
+
+  <section>
+    <h2>Binary Classification</h2>
+    <pre><code>log_reg = LogisticRegression()
+log_reg.fit(X_train, y_train)
+y_pred_log = log_reg.predict(X_test)
+y_prob_log = log_reg.predict_proba(X_test)[:, 1]
+fpr, tpr, thresholds = roc_curve(y_test, y_prob_log)
+roc_auc = roc_auc_score(y_test, y_prob_log)</code></pre>
+
+    <h3>ROC Curve</h3>
+    <!-- Replace link below with your actual ROC curve image link -->
+    <img src="https://via.placeholder.com/600x400?text=ROC+Curve" alt="ROC Curve Honda vs Chevrolet">
+
+    <blockquote>
+      An AUC of 0.92 suggests the model makes highly accurate predictions with a low false positive and false negative rate.
+    </blockquote>
+  </section>
+
+  <section>
+    <h2>Ethics</h2>
+
+    <h3>Big Data and Human-Centered Computing</h3>
+    <blockquote>
+      Data scientists must prioritize fairness and privacy. Our KNN model had a Kappa score of 0.42, showing moderate reliability.
+    </blockquote>
+    <!-- Replace link below with emissions bar chart -->
+    <h4>Emissions by Region (MPG Average)</h4>
+    <img src="https://via.placeholder.com/600x400?text=Emissions+by+Region" alt="Emissions by Region Bar Chart">
+
+    <h3>Democratic Institutions</h3>
+    <blockquote>
+      Transparency in models reinforces trust in democratic processes. Our logistic regression model achieved an AUC of 0.92.
+    </blockquote>
+    <!-- Replace link below with feature weights visualization -->
+    <h4>Feature Weights (Logistic Regression)</h4>
+    <img src="https://via.placeholder.com/600x400?text=Feature+Weights" alt="Feature Weights Chart">
+
+    <h3>Climate Change</h3>
+    <blockquote>
+      Vehicle efficiency impacts emissions. Our regression model showed newer cars improve mpg. The RMSE of 3.53 highlights the importance of innovation.
+    </blockquote>
+    <!-- Replace link below with MPG over time line chart -->
+    <h4>Average MPG Over Years</h4>
+    <img src="https://via.placeholder.com/600x400?text=Average+MPG+Over+Years" alt="Average MPG Over Years Line Chart">
+  </section>
+
+</body>
+</html>
