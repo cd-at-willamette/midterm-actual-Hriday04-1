@@ -1,0 +1,224 @@
+---
+title: "Characterizing Automobiles"
+author: "Hriday"
+date: "03/17/2025"
+jupyter: python3
+format: 
+  html:  # You will quite likely want to change all but the last one, to taste
+    theme:
+        light: flatly
+        dark: darkly
+    mainfont: monospace
+    highlight-style: github
+    title-block-banner: true
+    embed-resources: true
+---
+
+# Setup
+
+-   Setup
+
+```{python}
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statsmodels.formula.api as smf
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    mean_squared_error,
+    cohen_kappa_score,
+    roc_curve,
+    roc_auc_score,
+    confusion_matrix
+)
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+import warnings
+warnings.filterwarnings('ignore')
+path="/Users/hridayraj/Desktop/sp25/ml/midterm-actual-Hriday04-1-main/Auto.csv"
+Auto=pd.read_csv(path)
+auto=Auto
+auto.dropna(inplace=True)
+```
+
+# Dataframe
+
+-   We use the `Auto` dataframe.
+
+```{python auto}
+Auto.head()
+```
+
+-   It has the following variable names, which describe various attributes of automobiles.
+
+```{python}
+Auto.columns
+```
+
+# Multiple Regression
+
+-   Run a linear regression model with `mpg` as the dependent variable and `horsepower` and `year` as features (variables).
+-   Compute and comment on the RMSE.
+
+```{python regression}
+m1= smf.ols('mpg ~ year * horsepower', data =auto).fit()
+#interaction model 
+m1.summary()
+rmse1 = np.sqrt(m1.mse_resid)
+print(f'\nm1 RMSE: {rmse1}')
+
+```
+
+> Since the RMSE is 3.533 on average the predicted values are 3.5 mpg away from the actual values.
+
+# Feature Engineering
+
+-   Create 10 features based on the `name` column.
+-   Remove all rows with a missing value.
+-   Ensure only `mpg` and the engineered features remain.
+-   Compute and comment on the RMSE.
+
+```{python features}
+auto['brand'] = auto['name'].apply(lambda x: x.split()[0].lower())
+
+top_brands = auto['brand'].value_counts().nlargest(10).index
+auto['brand_top'] = auto['brand'].apply(lambda x: x if x in top_brands else 'other')
+
+brand_dummies = pd.get_dummies(auto['brand_top'])
+
+engineered_df = pd.concat([auto[['mpg']], brand_dummies], axis=1)
+
+X_eng = brand_dummies
+y_eng = engineered_df['mpg']
+
+X_train_eng, X_test_eng, y_train_eng, y_test_eng = train_test_split(X_eng, y_eng, random_state=42)
+
+m2 = smf.ols('mpg ~ ' + ' + '.join(brand_dummies.columns), data=engineered_df).fit()
+
+print(m2.summary())
+
+rmse2 = np.sqrt(m2.mse_resid)
+print(f'\nFeature Engineering Model RMSE: {rmse2:.2f}')
+
+
+```
+
+> To predict mpg I engineered new features from the name column to capture brand and vehicle type information. Using these features in a regression model resulted in an RMSE of 6.9, an improvement from 3.53, showing the engineered features did not help improve the model's prediction of mpg likely because brands have less to do with mpg than horsepower/year.
+
+# Classification
+
+-   Use either of $K$-NN or Naive Bayes to predict whether an automobile is a `chevrolet` or a `honda`.
+-   Explain your choice of technique.
+-   Report on your Kappa value.
+
+```{python classification}
+binary_df = auto[auto['brand'].isin(['chevrolet', 'honda'])].copy()
+
+counts = binary_df['brand'].value_counts()
+print("Brand counts:\n", counts)
+
+min_count = counts.min()
+
+chevy_sampled = binary_df[binary_df['brand'] == 'chevrolet'].sample(min_count, random_state=42)
+honda_sampled = binary_df[binary_df['brand'] == 'honda'].sample(min_count, random_state=42)
+
+balanced_df = pd.concat([chevy_sampled, honda_sampled])
+
+X = balanced_df[['horsepower', 'weight', 'acceleration', 'year']]
+y = balanced_df['brand'].apply(lambda x: 1 if x == 'honda' else 0)
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42)
+
+knn = KNeighborsClassifier(n_neighbors=3)
+knn.fit(X_train, y_train)
+
+y_pred = knn.predict(X_test)
+
+kappa = cohen_kappa_score(y_test, y_pred)
+print(f'Kappa Score (Chevrolet vs Honda): {kappa:.2f}')
+
+cm = confusion_matrix(y_test, y_pred)
+print("\nConfusion Matrix:\n", cm)
+```
+
+> I used K-Nearest Neighbors (K-NN) because it is a simple and effective method for small datasets. It makes no assumptions about the data distribution and works well with features like horsepower, weight, and year.
+
+> The Kappa score is 0.42, indicates moderate agreement between predictions and actual labels, beyond chance.
+
+# Binary Classification
+
+-   Predict whether a car is a `honda`.
+-   Use model weights.
+-   Display and comment on an ROC curve.
+
+```{python binary classification}
+log_reg = LogisticRegression()
+log_reg.fit(X_train, y_train)
+
+y_pred_log = log_reg.predict(X_test)
+y_prob_log = log_reg.predict_proba(X_test)[:, 1]
+
+# Get model weights (coefficients)
+feature_names = X.columns.tolist()
+weights = log_reg.coef_[0]
+
+print("\nModel Weights (Logistic Regression Coefficients):")
+for feature, weight in zip(feature_names, weights):
+    print(f"{feature}: {weight:.4f}")
+
+# ROC Curve and AUC Score
+fpr, tpr, thresholds = roc_curve(y_test, y_prob_log)
+roc_auc = roc_auc_score(y_test, y_prob_log)
+
+# Plot ROC Curve
+plt.figure()
+plt.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+plt.plot([0, 1], [0, 1], linestyle="--")
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve: Honda vs Chevrolet (Logistic Regression)")
+plt.legend(loc="lower right")
+plt.show()
+
+print(f'\nROC AUC Score: {roc_auc:.2f}')
+
+```
+
+> An AUC of 0.92 suggests the model makes highly accurate predictions with a low rate of false positives and false negatives.
+
+# Ethics
+
+-   Based on your analysis, comment on the [Clean Air Act of 1970 and Ammendments of 1977](https://www.epa.gov/clean-air-act-overview/evolution-clean-air-act)
+-   Discuss the civic reposibilities of data scientists for:
+    -   Big Data and Human-Centered Computing
+    -   Democratic Institutions
+    -   Climate Change
+-   Provide at least one statistical measure for each, such as a RMSE, Kappa value, or ROC curve.
+
+> Big Data and Human-Centered Computing
+> Data scientists must prioritize fairness and privacy when handling large datasets we must use the apppropriate sampling techniques when faced with biased population sizes. Our KNN model had a Kappa score of 0.42, showing moderate reliability. In human-centered applications, similar models should be audited to avoid bias and protect individuals.
+
+
+```{python big data}
+emissions_by_region = auto.groupby('origin')['mpg'].mean()
+emissions_by_region
+```
+
+> Democratic Institutions
+>Transparency in models reinforces trust in democratic processes. Our logistic regression model achieved an AUC of 0.92. High-performing models in public policy should include clear explanations of their decisions to maintain accountability.
+
+```{python democracy}
+pd.Series(weights, index=feature_names)
+```
+
+> Climate Change
+> Vehicle efficiency directly impacts emissions. Our regression model showed that newer cars improve mpg, influenced by environmental policies like the Clean Air Act. The RMSE of 3.53 highlights the importance of continuous innovation for sustainability.
+
+
+```{python climate}
+avg_mpg_by_year = auto.groupby('year')['mpg'].mean()
+avg_mpg_by_year.plot(title="Average MPG Over Years", xlabel="Year", ylabel="MPG")
+plt.show()
+```
